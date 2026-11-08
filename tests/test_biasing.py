@@ -141,11 +141,13 @@ def _normalize(text: str) -> str:
     return " ".join(re.sub(r"[^a-z ]", " ", text.lower()).split())
 
 
-async def _transcribe(
-    wav_paths: List[Path], extra_args: List[str]
-) -> Tuple[List[str], str]:
-    """Run the server, transcribe each recording through it in order, and
-    return the transcripts and the server's log."""
+async def _transcribe(wav_path: Path, extra_args: List[str]) -> Tuple[str, str]:
+    """Run the server, transcribe one recording through it, and return the
+    transcript and the server's log.
+
+    One server per recording: the server ends a connection once it has sent the
+    transcript, and over stdio that ends the server.
+    """
     # A file, not a pipe: whisper.cpp logs a lot, and a full pipe would stall
     # the server.
     log_file = tempfile.TemporaryFile()
@@ -176,7 +178,7 @@ async def _transcribe(
         log_file.seek(0)
         return log_file.read().decode(errors="replace")
 
-    texts: List[str] = []
+    text: Optional[str] = None
     try:
         await async_write_event(Describe().event(), proc.stdin)
         while True:
@@ -187,79 +189,74 @@ async def _transcribe(
             if Info.is_type(event.type):
                 break
 
-        for wav_path in wav_paths:
-            await async_write_event(Transcribe().event(), proc.stdin)
-            with wave.open(str(wav_path), "rb") as wav_file:
-                await async_write_event(
-                    AudioStart(
-                        rate=wav_file.getframerate(),
-                        width=wav_file.getsampwidth(),
-                        channels=wav_file.getnchannels(),
-                    ).event(),
-                    proc.stdin,
-                )
-                for chunk in wav_to_chunks(wav_file, _SAMPLES_PER_CHUNK):
-                    await async_write_event(chunk.event(), proc.stdin)
+        await async_write_event(Transcribe().event(), proc.stdin)
+        with wave.open(str(wav_path), "rb") as wav_file:
+            await async_write_event(
+                AudioStart(
+                    rate=wav_file.getframerate(),
+                    width=wav_file.getsampwidth(),
+                    channels=wav_file.getnchannels(),
+                ).event(),
+                proc.stdin,
+            )
+            for chunk in wav_to_chunks(wav_file, _SAMPLES_PER_CHUNK):
+                await async_write_event(chunk.event(), proc.stdin)
 
-            await async_write_event(AudioStop().event(), proc.stdin)
+        await async_write_event(AudioStop().event(), proc.stdin)
 
-            while True:
-                event = await asyncio.wait_for(
-                    async_read_event(proc.stdout), timeout=_TRANSCRIBE_TIMEOUT
-                )
-                assert event is not None, log()[-5000:]
-                if Transcript.is_type(event.type):
-                    texts.append(Transcript.from_event(event).text)
-                    break
+        while text is None:
+            event = await asyncio.wait_for(
+                async_read_event(proc.stdout), timeout=_TRANSCRIBE_TIMEOUT
+            )
+            assert event is not None, log()[-5000:]
+            if Transcript.is_type(event.type):
+                text = Transcript.from_event(event).text
     finally:
         proc.stdin.close()
         await proc.wait()
 
     assert proc.returncode == 0, log()[-5000:]
-    return texts, log()
+    return text, log()
 
 
 @pytest.mark.asyncio
 async def test_home_assistant_names_fix_misheard_devices() -> None:
-    wav_paths = [_BIASING_DIR / f"{recording}.wav" for recording, _ in _CASES]
-
-    plain, _ = await _transcribe(wav_paths, [])
-
     hass = FakeHomeAssistant()
     await hass.start()
+    hass_args = [
+        "--hass-token",
+        _TOKEN,
+        "--hass-api",
+        f"http://127.0.0.1:{hass.port}/api",
+        # Generous: CI runners are slow, and a fetch that misses the deadline
+        # would leave the utterance unbiased.
+        "--hass-prompt-timeout",
+        "30",
+    ]
+
+    failures = []
     try:
-        biased, log = await _transcribe(
-            wav_paths,
-            [
-                "--hass-token",
-                _TOKEN,
-                "--hass-api",
-                f"http://127.0.0.1:{hass.port}/api",
-                # Generous: CI runners are slow, and a fetch that misses the
-                # deadline would leave the utterance unbiased.
-                "--hass-prompt-timeout",
-                "30",
-            ],
-        )
+        for recording, name in _CASES:
+            wav_path = _BIASING_DIR / f"{recording}.wav"
+            plain, _ = await _transcribe(wav_path, [])
+            biased, log = await _transcribe(wav_path, hass_args)
+
+            # Shown on failure, and with -s.
+            print(f"{recording}: {plain!r} -> {biased!r}")
+
+            # The names were fetched from Home Assistant and put in the prompt.
+            prompts = re.findall(r"Initial prompt: (.*)", log)
+            assert prompts and ("Ecobee" in prompts[-1]), log[-5000:]
+
+            if name in _normalize(plain):
+                failures.append(
+                    f"{recording}: heard {plain!r} without the names already; "
+                    "this recording does not test biasing"
+                )
+            if name not in _normalize(biased):
+                failures.append(f"{recording}: still heard {biased!r} with the names")
     finally:
         await hass.stop()
 
-    # Shown on failure, and with -s: what each recording came back as.
-    for (recording, _), before, after in zip(_CASES, plain, biased):
-        print(f"{recording}: {before!r} -> {after!r}")
-
-    # The names were fetched from Home Assistant and put into the prompt.
     assert "get_states" in hass.commands
-    assert "Initial prompt:" in log and "Ecobee" in log, log
-
-    failures = []
-    for (recording, name), before, after in zip(_CASES, plain, biased):
-        if name in _normalize(before):
-            failures.append(
-                f"{recording}: heard {before!r} without the names already; "
-                "this recording does not test biasing"
-            )
-        if name not in _normalize(after):
-            failures.append(f"{recording}: still heard {after!r} with the names")
-
     assert not failures, "\n".join(failures)

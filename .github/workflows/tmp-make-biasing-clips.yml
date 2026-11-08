@@ -21,4 +21,4 @@ jobs:
       - name: Try them
         run: |
           script/setup --dev --hass
-          .venv/bin/python3 -m pytest tests/test_biasing.py -s -v 2>&1 | grep -v "unknown token"
+          .venv/bin/python3 -m pytest tests/test_biasing.py -s -v 2>&1 | grep -v "unknown token" | grep -E "^[a-z]+: |PASSED|FAILED|Error|still heard|already" | head -60
