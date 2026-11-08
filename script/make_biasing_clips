@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Synthesize the recordings for tests/test_biasing.py with Piper.
+#
+# The clips are committed, so this only needs running when a sentence in
+# tests/biasing/sentences.txt is added or changed. Needs network access (the
+# voice comes from Hugging Face) and ffmpeg:
+#
+#   pip install 'piper-tts==1.8.0'
+#   script/make_biasing_clips
+set -euo pipefail
+
+dir="$(cd "$(dirname "$0")/.." && pwd)/tests/biasing"
+voice="${PIPER_VOICE:-en_US-lessac-medium}"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+python3 -m piper.download_voices --data-dir "$work" "$voice"
+
+grep -v '^#' "$dir/sentences.txt" | while IFS='|' read -r name sentence; do
+    [ -n "$name" ] || continue
+    echo "$name: $sentence"
+    python3 -m piper --data-dir "$work" -m "$voice" -f "$work/$name.wav" \
+        -- "$sentence"
+    # 16 kHz mono is what Whisper gets anyway, and keeps the files small.
+    ffmpeg -loglevel error -y -i "$work/$name.wav" -ar 16000 -ac 1 \
+        "$dir/$name.wav"
+done
