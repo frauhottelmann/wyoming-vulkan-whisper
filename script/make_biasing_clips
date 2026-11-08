@@ -20,8 +20,8 @@ grep -v '^#' "$dir/sentences.txt" | while IFS='|' read -r name sentence; do
     [ -n "$name" ] || continue
     echo "$name: $sentence"
     python3 -m piper --data-dir "$work" -m "$voice" -f "$work/$name.wav" \
-        -- "$sentence"
+        -- "$sentence" </dev/null
     # 16 kHz mono is what Whisper gets anyway, and keeps the files small.
-    ffmpeg -loglevel error -y -i "$work/$name.wav" -ar 16000 -ac 1 \
+    ffmpeg -nostdin -loglevel error -y -i "$work/$name.wav" -ar 16000 -ac 1 \
         "$dir/$name.wav"
 done
