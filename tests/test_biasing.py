@@ -19,6 +19,7 @@ without the names proves nothing about biasing.
 import asyncio
 import re
 import sys
+import tempfile
 import wave
 from asyncio.subprocess import PIPE
 from pathlib import Path
@@ -145,6 +146,9 @@ async def _transcribe(
 ) -> Tuple[List[str], str]:
     """Run the server, transcribe each recording through it in order, and
     return the transcripts and the server's log."""
+    # A file, not a pipe: whisper.cpp logs a lot, and a full pipe would stall
+    # the server.
+    log_file = tempfile.TemporaryFile()
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
@@ -163,10 +167,14 @@ async def _transcribe(
         *extra_args,
         stdin=PIPE,
         stdout=PIPE,
-        stderr=PIPE,
+        stderr=log_file,
     )
     assert proc.stdin is not None
     assert proc.stdout is not None
+
+    def log() -> str:
+        log_file.seek(0)
+        return log_file.read().decode(errors="replace")
 
     texts: List[str] = []
     try:
@@ -175,7 +183,7 @@ async def _transcribe(
             event = await asyncio.wait_for(
                 async_read_event(proc.stdout), timeout=_START_TIMEOUT
             )
-            assert event is not None
+            assert event is not None, log()[-5000:]
             if Info.is_type(event.type):
                 break
 
@@ -199,17 +207,16 @@ async def _transcribe(
                 event = await asyncio.wait_for(
                     async_read_event(proc.stdout), timeout=_TRANSCRIBE_TIMEOUT
                 )
-                assert event is not None
+                assert event is not None, log()[-5000:]
                 if Transcript.is_type(event.type):
                     texts.append(Transcript.from_event(event).text)
                     break
     finally:
         proc.stdin.close()
-        _, stderr = await proc.communicate()
+        await proc.wait()
 
-    log = stderr.decode(errors="replace")
-    assert proc.returncode == 0, log
-    return texts, log
+    assert proc.returncode == 0, log()[-5000:]
+    return texts, log()
 
 
 @pytest.mark.asyncio

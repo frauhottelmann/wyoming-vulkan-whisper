@@ -1,6 +1,5 @@
-# TEMPORARY: synthesizes the biasing clips (Hugging Face is unreachable from the
-# authoring environment) and shows what Whisper makes of them. Removed before merge.
-name: Make biasing clips (temporary)
+# TEMPORARY: shows what Whisper makes of the biasing clips. Removed before merge.
+name: Try biasing clips (temporary)
 
 on:
   push:
@@ -8,34 +7,18 @@ on:
       - claude/project-thread-cjp72i
     paths:
       - .github/workflows/tmp-make-biasing-clips.yml
-      - tests/biasing/sentences.txt
-      - script/make_biasing_clips
-
-permissions:
-  contents: write
+      - tests/test_biasing.py
+      - tests/biasing/**
 
 jobs:
-  clips:
+  try:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - name: Synthesize
-        run: |
-          sudo apt-get update -q && sudo apt-get install -yq ffmpeg
-          pip install 'piper-tts==1.8.0'
-          script/make_biasing_clips
-      - name: Commit clips
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898729+github-actions[bot]@users.noreply.github.com"
-          git add tests/biasing/*.wav
-          git commit -m "Synthesize biasing test clips" || exit 0
-          git push
       - name: Try them
-        continue-on-error: true
         run: |
           script/setup --dev --hass
-          .venv/bin/python3 -m pytest tests/test_biasing.py -s -v
+          .venv/bin/python3 -m pytest tests/test_biasing.py -s -v 2>&1 | grep -v "unknown token"
