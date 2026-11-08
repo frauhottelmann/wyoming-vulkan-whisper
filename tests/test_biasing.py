@@ -43,7 +43,6 @@ _CASES = [
     ("ecobee", "ecobee"),
     ("nanoleaf", "nanoleaf"),
     ("govee", "govee"),
-    ("tado", "tado"),
     ("yeelight", "yeelight"),
     ("zibbet", "zibbet"),
 ]
@@ -54,7 +53,6 @@ _ENTITIES = {
     "climate.ecobee": "Ecobee",
     "light.nanoleaf": "Nanoleaf",
     "light.govee_strip": "Govee Strip",
-    "climate.tado": "Tado",
     "light.yeelight": "Yeelight",
     "light.zibbet_lamp": "Zibbet Lamp",
 }
