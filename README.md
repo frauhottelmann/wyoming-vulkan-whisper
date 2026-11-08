@@ -188,6 +188,23 @@ lands in tier 2. Run with `--debug` to see how many names were dropped and the
 exact prompt used. `--initial-prompt` still works and is kept at the front of the
 prompt, ahead of anything discovered from Home Assistant.
 
+### Checking that it works
+
+`tests/test_biasing.py` checks the whole path end to end: a fake Home Assistant
+serves a home with devices like "Ecobee" and "Nanoleaf", and synthesized
+commands naming them must come back wrong from the plain `base` model ("echo
+bee", "nanolith", "yellow light") and right once the server has the names.
+
+In your own home:
+
+1. Start the container with `--hass-token … --debug` and look for
+   `Names updated (N total)` and `Initial prompt: …` in its log. If your names
+   are in that prompt, the fetch works.
+2. Give an exposed light an unusual name or alias, then say a command with it
+   and read what was heard under *Settings → Voice assistants → Debug* in Home
+   Assistant. Compare against a run without `--hass-token`. With the default
+   `--hass-refresh-seconds 0`, a rename takes effect on the next command.
+
 ### Distil-Whisper models are not compatible
 
 Distil-Whisper checkpoints (`distil-small.en`, `distil-large-v3`, …) were

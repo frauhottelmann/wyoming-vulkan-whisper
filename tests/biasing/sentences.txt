@@ -1,0 +1,5 @@
+# <recording>|<sentence>. Synthesized into <recording>.wav by script/make_biasing_clips.
+ecobee|What's the temperature of the Ecobee?
+nanoleaf|Turn off the Nanoleaf.
+govee|Turn on the Govee strip.
+yeelight|Turn on the Yeelight.
