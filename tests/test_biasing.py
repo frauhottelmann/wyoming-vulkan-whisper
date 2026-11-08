@@ -44,7 +44,6 @@ _CASES = [
     ("nanoleaf", "nanoleaf"),
     ("govee", "govee"),
     ("yeelight", "yeelight"),
-    ("zibbet", "zibbet"),
 ]
 
 # The home the fake Home Assistant serves: exposed entities with their friendly
@@ -54,7 +53,6 @@ _ENTITIES = {
     "light.nanoleaf": "Nanoleaf",
     "light.govee_strip": "Govee Strip",
     "light.yeelight": "Yeelight",
-    "light.zibbet_lamp": "Zibbet Lamp",
 }
 
 

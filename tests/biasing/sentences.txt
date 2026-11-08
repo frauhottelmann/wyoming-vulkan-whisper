@@ -3,4 +3,3 @@ ecobee|What's the temperature of the Ecobee?
 nanoleaf|Turn off the Nanoleaf.
 govee|Turn on the Govee strip.
 yeelight|Turn on the Yeelight.
-zibbet|Turn on the Zibbet lamp.
