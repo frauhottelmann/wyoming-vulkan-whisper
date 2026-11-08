@@ -9,6 +9,7 @@ on:
     paths:
       - .github/workflows/tmp-make-biasing-clips.yml
       - tests/biasing/sentences.txt
+      - script/make_biasing_clips
 
 permissions:
   contents: write
